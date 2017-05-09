@@ -14,6 +14,9 @@ use Qiniu\Storage\UploadManager;
 
 // 文件上传方法
 function qiniu_upload_file ($file, $key) {
+	if (!file_exists($file)) {
+		return false;
+	}
     static $uploadMgr = null;
     static $token = '';
     if (!$uploadMgr) {
@@ -68,17 +71,28 @@ function qiniu_handle_upload ($data) {
  *
  * @see  https://developer.qiniu.com/dora/api/1279/basic-processing-images-imageview2
  */
-add_filter('wp_generate_attachment_metadata', 'qiniu_upload_attachment', 999);
-function qiniu_upload_attachment ($metadata) {
+add_filter('wp_generate_attachment_metadata', 'qiniu_update_attachment_meta', 999);
+function qiniu_update_attachment_meta ($metadata, $upload = false) {
     if(empty($metadata)) {
         return $metadata;
     }
 
     $file = $metadata['file'];
 
+    $wp_upload_dir = wp_upload_dir();
+	$basedir = $wp_upload_dir['basedir'];
+
+	$filename = $basedir . '/'. $file;
+
     $fixfile = qiniu_fixfile($file);
 
     $key = md5($fixfile['file']) . '.' . $fixfile['exte'];
+
+    if($upload) {
+		if (qiniu_upload_file($filename, $key) == false) {
+			return;
+		}
+	}
 
     //$metadata['file'] = $key;
     $metadata['file'] = $key;
@@ -87,6 +101,9 @@ function qiniu_upload_attachment ($metadata) {
     //上传小尺寸文件
     if (isset($sizes) && count($sizes) > 0){
         foreach ($sizes as $k => $img){
+        	if(empty($img['width'])) {
+        		return;
+        	}
         	$w = $img['width'];
         	$h = $img['height'];
 
@@ -105,6 +122,8 @@ function qiniu_upload_attachment ($metadata) {
         }
     }
 
+    $metadata['qiniu'] = true;
+
     return $metadata;
 }
 
@@ -122,7 +141,7 @@ function qiniu_update_attachment($file) {
 add_filter('wp_get_attachment_url', 'qiniu_format_attachment_url');
 function qiniu_format_attachment_url($url) {
 	$urls = parse_url($url);
-	$path = $urls['path'];
+	$path = trim($urls['path'], '/');
 	$info = pathinfo($path);
 	$extension = $info['extension'];
 
@@ -141,8 +160,10 @@ function qiniu_fixfile($file) {
     $basename = $info['basename'];
     $extension = $info['extension'];
 
+    $path = trim($wp_upload_dir['subdir'], '/');
+
     return array(
-    	'file' => $wp_upload_dir['subdir'] . '/' . $basename,
+    	'file' => $path . '/' . $basename,
     	'exte' => $extension
     );
 }
@@ -185,4 +206,51 @@ function qiniu_warning($data) {
             }
         }
     }
+}
+
+add_action('init', 'qiniu_sync_handle');
+function qiniu_sync_handle() {
+	global $wpdb;
+
+	// 同步历史文件操作
+	if(!empty($_POST['qiniu_sync'])) {
+
+		if(!empty($_POST['post_id'])) {
+			$post_id = $_POST['post_id'];
+			$postmeta = get_post_meta($post_id, '_wp_attachment_metadata');
+			$postmeta = $postmeta[0];
+
+			if(!empty($postmeta['file'])) {
+				$oldfile = $postmeta['file'];
+
+				$metadata = qiniu_update_attachment_meta($postmeta, true);
+
+				$newfile = $metadata['file'];
+
+				update_post_meta($post_id, '_wp_attachment_metadata', $metadata);
+			}
+		}
+
+		$posts = $wpdb->get_results("SELECT ID, post_date, post_title, post_parent FROM $wpdb->posts where post_type='attachment'");
+		$post_ids = array();
+		foreach ($posts as $post) {
+			$postmeta = get_post_meta($post->ID, '_wp_attachment_metadata');
+			$postmeta = $postmeta[0];
+
+			if(empty($postmeta['qiniu']) && !empty($postmeta['file'])) {
+				// 新的meta data
+				//$metadata = qiniu_update_attachment_meta($postmeta[0]);
+
+				array_push($post_ids, $post->ID);
+			}
+		}
+
+		echo json_encode(array(
+			'data' => $post_ids,
+			'post' => $post_ids[0],
+			'oldfile' => $oldfile,
+			'newfile' => $newfile
+		));
+		die();
+	}
 }

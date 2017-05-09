@@ -49,7 +49,73 @@ $qiniu_options = get_option('qiniu_options');
             </tbody>
 
         </table>
-
         <p class="submit"><input type="submit" name="submit" id="submit" class="button button-primary" value="保存更改"></p>
     </form>
+
+    <div id="icon-options-general" class="icon32"><br></div>
+    <h2>同步历史文件</h2>
+    <p>如果您需要上传之前的文件到七牛云，请进行如下操作：(<strong>操作之前一定要备份数据库！</strong>)</p>
+	
+	<style type="text/css">
+		.sync-info-wrap {
+			height: 150px;
+			width: 500px;
+			border: 1px solid #ccc;
+			overflow: auto;
+			background: #f1f1f1;
+		}
+		.sync-info-wrap p {
+			margin: 0;
+		}
+	</style>
+	<div class="sync-info-wrap">
+		<div class="sync-info-in">
+			
+		</div>
+	</div>
+
+	<p class="sync"><input type="submit" name="sync" id="sync" class="button button-success" value="同步历史文件"></p>
 </div>
+
+<script type="text/javascript">
+	var $ = jQuery;
+
+	// 同步历史文件脚本
+	$('#sync').click(function(event) {
+		event.stopPropagation();
+		var total = 0;
+
+		(function(post_id) {
+			var args = arguments;
+			
+			$.post('', {
+				qiniu_sync: 1,
+				post_id: post_id
+			}, function(data) {
+				var post_ids = data['data'];
+				var post_id = data['post'];
+
+				var oldfile = data['oldfile'];
+				var newfile = data['newfile'];
+
+				var curnum = total - post_ids.length;
+
+				if(post_ids.length == 0) {
+					return;
+				}
+
+				args.callee(post_id);
+
+
+
+				if (oldfile) {
+					$('.sync-info-in').append('<p>'+oldfile+' to '+newfile+' 同步成功...('+curnum+'/'+total+')</p>');
+					$('.sync-info-wrap').scrollTop($('.sync-info-in').height());
+				} else {
+					$('.sync-info-in').html('开始同步文件...');
+					total = post_ids.length;
+				}
+			}, 'json');
+		})(11);
+	});
+</script>
