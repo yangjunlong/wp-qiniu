@@ -101,6 +101,7 @@ $qiniu_options = get_option('qiniu_options');
 				var curnum = total - post_ids.length;
 
 				if(post_ids.length == 0) {
+					$('.sync-info-in').html('您已同步完所有文件...');
 					return;
 				}
 
