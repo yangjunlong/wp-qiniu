@@ -117,6 +117,6 @@ $qiniu_options = get_option('qiniu_options');
 					total = post_ids.length;
 				}
 			}, 'json');
-		})(11);
+		})();
 	});
 </script>

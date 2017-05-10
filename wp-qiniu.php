@@ -85,12 +85,13 @@ function qiniu_update_attachment_meta ($metadata, $upload = false) {
 	$filename = $basedir . '/'. $file;
 
     $fixfile = qiniu_fixfile($file);
-
+    
     $key = md5($fixfile['file']) . '.' . $fixfile['exte'];
 
     if($upload) {
 		if (qiniu_upload_file($filename, $key) == false) {
-			return;
+
+			//return;
 		}
 	}
 
@@ -142,15 +143,18 @@ add_filter('wp_get_attachment_url', 'qiniu_format_attachment_url');
 function qiniu_format_attachment_url($url) {
 	$urls = parse_url($url);
 	$path = trim($urls['path'], '/');
+
+    $host = str_replace($path, '', $url);
+
 	$info = pathinfo($path);
 	$extension = $info['extension'];
 
 	$key = md5($path) . '.' . $extension;
 
-	$qiniu_options = get_option('qiniu_options');
-    $domain = trim($qiniu_options['domain'], '/');
+	// $qiniu_options = get_option('qiniu_options');
+ //    $domain = trim($qiniu_options['domain'], '/');
 
-	return $domain . '/'. $key;
+	return $host . $key;
 }
 
 function qiniu_fixfile($file) {
@@ -163,7 +167,7 @@ function qiniu_fixfile($file) {
     $path = trim($wp_upload_dir['subdir'], '/');
 
     return array(
-    	'file' => $path . '/' . $basename,
+    	'file' => $file,
     	'exte' => $extension
     );
 }
@@ -217,8 +221,11 @@ function qiniu_sync_handle() {
 
 		if(!empty($_POST['post_id'])) {
 			$post_id = $_POST['post_id'];
+            $attached_file = get_post_meta($post_id, '_wp_attached_file');
 			$postmeta = get_post_meta($post_id, '_wp_attachment_metadata');
 			$postmeta = $postmeta[0];
+
+            $postmeta['file'] = $attached_file[0];
 
 			if(!empty($postmeta['file'])) {
 				$oldfile = $postmeta['file'];
@@ -228,6 +235,28 @@ function qiniu_sync_handle() {
 				$newfile = $metadata['file'];
 
 				update_post_meta($post_id, '_wp_attachment_metadata', $metadata);
+
+                // 更新文章内容
+                $the_post = get_post($post_id);
+                $the_parent_id = $the_post->post_parent;
+
+                $the_parent_post = get_post($the_parent_id);
+                $the_parent_content = $the_parent_post->post_content;
+
+                $qiniu_options = get_option('qiniu_options');
+                $domain = trim($qiniu_options['domain'], '/');
+
+                $new_img_src = $domain . '/' . $newfile;
+ 
+                $oldfile = preg_replace('/\//', '\/', $oldfile); 
+                // 替换文章中旧的图片地址
+                $the_new_content  = preg_replace("/src=\"((http|ftp|https):\/\/sobird).+{$oldfile}/is", 'src="' . $new_img_src, $the_parent_content);
+                $the_new_content  = preg_replace("/href=\"((http|ftp|https):\/\/sobird).+{$oldfile}/is", 'href="' . $new_img_src, $the_new_content);
+
+                wp_update_post(array(
+                    'ID' => $the_parent_id,
+                    'post_content' => $the_new_content
+                ));
 			}
 		}
 
@@ -237,7 +266,7 @@ function qiniu_sync_handle() {
 			$postmeta = get_post_meta($post->ID, '_wp_attachment_metadata');
 			$postmeta = $postmeta[0];
 
-			if(empty($postmeta['qiniu']) && !empty($postmeta['file'])) {
+			if(empty($postmeta['qiniu'])) {
 				// 新的meta data
 				//$metadata = qiniu_update_attachment_meta($postmeta[0]);
 
