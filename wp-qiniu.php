@@ -146,6 +146,10 @@ function qiniu_format_attachment_url($url) {
 
     $host = str_replace($path, '', $url);
 
+    $wp_upload_dir = wp_upload_dir();
+
+    $baseurl = $wp_upload_dir['baseurl'];
+
 	$info = pathinfo($path);
 	$extension = $info['extension'];
 
@@ -154,7 +158,7 @@ function qiniu_format_attachment_url($url) {
 	// $qiniu_options = get_option('qiniu_options');
  //    $domain = trim($qiniu_options['domain'], '/');
 
-	return $host . $key;
+	return $baseurl . '/' . $key;
 }
 
 function qiniu_fixfile($file) {
