@@ -163,15 +163,16 @@ function qiniu_format_attachment_url($url) {
 
 function qiniu_fixfile($file) {
 	$wp_upload_dir = wp_upload_dir();
+    $basedir = $wp_upload_dir['basedir'];
+    $filename = str_replace($basedir, '', $file);
 
     $info = pathinfo($file);
-    $basename = $info['basename'];
     $extension = $info['extension'];
 
-    $path = trim($wp_upload_dir['subdir'], '/');
+    $filename = trim($filename, '/');
 
     return array(
-    	'file' => $file,
+    	'file' => $filename,
     	'exte' => $extension
     );
 }
